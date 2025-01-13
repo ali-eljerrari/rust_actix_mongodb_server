@@ -10,6 +10,7 @@ use mongodb::bson::doc;
 use env_logger;
 use std::env;
 use dotenv::dotenv;
+use tera::{Tera, Context};
 
 mod models;
 mod routes;
@@ -31,13 +32,19 @@ async fn health_check() -> impl Responder {
     }))
 }
 
-/// Root endpoint that returns API information
 #[get("/")]
-async fn index() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({
-        "message": "Welcome to the API",
-        "version": env!("CARGO_PKG_VERSION")
-    }))
+async fn index(tera: web::Data<Tera>) -> HttpResponse {
+    let mut context = Context::new();
+    context.insert("title", "My Actix Web App");
+    context.insert("message", "Hello, Actix with Tera!");
+
+    match tera.render("index.html.tera", &context) {
+        Ok(rendered) => HttpResponse::Ok().content_type("text/html").body(rendered),
+        Err(e) => {
+            eprintln!("Template error: {}", e);
+            HttpResponse::InternalServerError().body("Template error")
+        }
+    }
 }
 
 /// Main function that initializes and runs the HTTP server
@@ -56,6 +63,15 @@ async fn main() -> std::io::Result<()> {
     // Load environment variables from .env file
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
+    // Initialize Tera templates
+    let tera = match Tera::new("src/views/**/*") {
+        Ok(t) => t,
+        Err(e) => {
+            println!("Parsing error(s): {}", e);
+            ::std::process::exit(1);
+        }
+    };
 
     // Get MongoDB connection details from environment
     let uri = env::var("MONGO_URI").expect("MONGO_URI not set");
@@ -91,6 +107,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
+            .app_data(web::Data::new(tera.clone()))
             .wrap(Logger::default())
             .service(health_check)
             .service(index)
