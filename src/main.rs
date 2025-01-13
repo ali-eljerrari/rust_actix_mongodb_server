@@ -4,6 +4,7 @@
 // It handles configuration, database connection, routing, and server startup.
 
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, middleware::Logger};
+use chrono::{Datelike, Utc};
 use mongodb::{Client, Database};
 use mongodb::options::ClientOptions;
 use mongodb::bson::doc;
@@ -35,8 +36,9 @@ async fn health_check() -> impl Responder {
 #[get("/")]
 async fn index(tera: web::Data<Tera>) -> HttpResponse {
     let mut context = Context::new();
-    context.insert("title", "My Actix Web App");
-    context.insert("message", "Hello, Actix with Tera!");
+    context.insert("title", &"My Actix Web App");
+    context.insert("message", &"Hello, Actix with Tera!");
+    context.insert("date", &Utc::now().year().to_string());
 
     match tera.render("index.html.tera", &context) {
         Ok(rendered) => HttpResponse::Ok().content_type("text/html").body(rendered),
