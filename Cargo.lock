@@ -195,6 +195,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "futures",
+ "futures-util",
  "mongodb",
  "serde",
  "serde_json",

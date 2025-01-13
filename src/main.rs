@@ -3,7 +3,7 @@
 // This module sets up and runs the HTTP server with MongoDB integration.
 // It handles configuration, database connection, routing, and server startup.
 
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, middleware::Logger};
+use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, middleware, dev::Service as _};
 use chrono::{Datelike, Utc};
 use mongodb::{Client, Database};
 use mongodb::options::ClientOptions;
@@ -12,6 +12,7 @@ use env_logger;
 use std::env;
 use dotenv::dotenv;
 use tera::{Tera, Context};
+use futures_util::future::FutureExt;
 
 mod models;
 mod routes;
@@ -91,7 +92,7 @@ async fn main() -> std::io::Result<()> {
     
     // Verify MongoDB connection
     client
-        .database("admin")
+        .database(&database_name)
         .run_command(doc! { "ping": 1 })
         .await
         .expect("Failed to ping MongoDB");
@@ -110,7 +111,31 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_state.clone())
             .app_data(web::Data::new(tera.clone()))
-            .wrap(Logger::default())
+            .wrap(middleware::Logger::default())
+            .wrap_fn(|req, srv| {
+                let path = req.path().to_owned();
+                let method = req.method().to_owned();
+                // let headers = req.headers().clone();
+                let peer_addr = req.peer_addr().unwrap_or_else(|| std::net::SocketAddr::from(([0, 0, 0, 0], 0)));
+                let connection_info = req.connection_info().clone();
+                let scheme = connection_info.scheme().to_owned();
+                let host = connection_info.host().to_owned();
+                
+                println!("New Request started:");
+                println!("  Path: {}", path);
+                println!("  Method: {}", method);
+                // println!("  Headers: {:#?}", headers);
+                println!("  Client IP: {}", peer_addr);
+                println!("  Scheme: {}", scheme);
+                println!("  Host: {}", host);
+
+                srv.call(req).map(move |res| {
+                    if let Ok(res) = &res {
+                        println!("Response status: {}", res.status());
+                    }
+                    res
+                })
+            })
             .service(health_check)
             .service(index)
             .service(routes::user_route::get_users)
